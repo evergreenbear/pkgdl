@@ -4,6 +4,8 @@
 ## pkgdl: automate installing pre-compiled binaries for packages not provided by OpenMandriva mirrors
 ##
 
+## TODO: add Tailscale   [ https://pkgs.tailscale.com/stable/tailscale_latest_amd64.tgz ]
+
 ### CONFIG OPTIONS; these can be changed with `pkgdl config`
 declare -r pkgdl_MainDir="$HOME"/bin/pkgdl.d
 declare -r pkgdl_PkgFiles="$pkgdl_MainDir"/pkgs
@@ -105,6 +107,11 @@ config() {
 }
 
 main() {
+	# ensure a sane environment
+	[[ ! -d "$pkgdl_MainDir" ]] && mkdir -p "$pkgdl_MainDir"
+	[[ ! -d "$pkgdl_PkgFiles" ]] && mkdir -p "$pkgdl_PkgFiles"
+	[[ ! -d "$pkgdl_WorkDir" ]] && mkdir -p "$pkgdl_WorkDir"
+	
 	case "$1" in
 		"get")
 			shift
