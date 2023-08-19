@@ -8,7 +8,7 @@
 set -e
 
 # modify version variables to apply for your package, must be only the version e.g. 3.2.1
-declare -r tailscale_CurrentVersion="$(hyprctl version | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
+declare -r tailscale_CurrentVersion="$(tailscale version | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
 declare -r tailscale_LatestVersion="$(curl -Ls -o /dev/null -w %{url_effective} https://pkgs.tailscale.com/stable/tailscale_latest_amd64.tgz | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
 declare -r pkgName=${BASH_SOURCE##*/}
 
