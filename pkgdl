@@ -5,9 +5,9 @@
 ##
 
 ### CONFIG OPTIONS; these can be changed with `pkgdl config`
-declare -r pkgdl_MainDir="$HOME"/bin/pkgdl.d
-declare -r pkgdl_PkgFiles="$pkgdl_MainDir"/pkgs
-declare -r pkgdl_WorkDir="$pkgdl_MainDir"/work
+declare pkgdl_MainDir="$HOME"/bin/pkgdl.d
+declare pkgdl_PkgFiles="$pkgdl_MainDir"/pkgs
+declare pkgdl_WorkDir="$pkgdl_MainDir"/work
 ### ### ### ###
 
 ## colors to differentiate output
@@ -57,7 +57,7 @@ getPkg() {
 	if [[ -f "$pkgdl_PkgFiles/$1" ]]; then
 		printf "${clearbold}getting package ${cyanbold}$1...${clear}\n"
 		source "$pkgdl_PkgFiles/$1"
-		printf "${greenbold}transaction completed successfully${clear}"
+		printf "${greenbold}transaction completed successfully${clear}\n"
 		exit 0
 	else
 		# die if it doesn't
@@ -67,12 +67,17 @@ getPkg() {
 
 # generate & modify template
 template() {
-	cp -v "$pkgdl_MainDir"/template_pkgfile "$pkgdl_PkgFiles"/"$1"
-	sed -i "s/template/${1}/g" "$_"
+	if [[ -f "$pkgdl_PkgFiles"/"$1" ]]; then
+		fatal "pkgfile $1 exists, not overwriting"
+	else
+		cp -v "$pkgdl_MainDir"/template_pkgfile "$pkgdl_PkgFiles"/"$1"
+		sed -i "s/template/${1}/g" "$_"
+	fi
 }
 
 config() {
-	case "$1" in
+	# $1 case-insensitive
+	case "${1,,}" in
 		"help"|"")
 			printf "$(
 			cat <<- EOF
@@ -82,12 +87,24 @@ config() {
 			${cyanbold}MainDir${clear}  : change main directory of pkgdl       (default $HOME/bin/pkgdl.d)
 			${cyanbold}PkgFiles${clear} : change directory for package scripts (default [MainDir]/pkgs)
 			${cyanbold}WorkDir${clear}  : change package work directory        (default [MainDir]/work)
+			
+			${clearbold}full path must be used when using pkgdl config
+			return options to defaults by using 'default' instead of a path${clear}
 			EOF
 			)"
 			;;
-		"MainDir")
+		"maindir")
 			shift
-			sed -i "s|^declare -r pkgdl_MainDir.*$|declare -r pkgdl_MainDir=$1|" "$0"
+			# take advantage of how sed with single-quotes does not expand variables and double-quotes will
+			[[ "${1,,}" = "default" ]] && sed -i 's|^declare pkgdl_MainDir.*$|declare pkgdl_MainDir="$HOME"/bin/pkgdl.d|' "$0" || sed -i "s|^declare pkgdl_MainDir.*$|declare pkgdl_MainDir=$1|" "$0"
+			;;
+		"pkgfiles"|"pkgdir")
+			shift
+			[[ "${1,,}" = "default" ]] && sed -i 's|^declare pkgdl_PkgFiles.*$|declare pkgdl_PkgFiles="$pkgdl_MainDir"/pkgs|' "$0" || sed -i "s|^declare pkgdl_PkgFiles.*$|declare kgdl_PkgFiles=$1|" "$0" || sed -i "s|^declare pkgdl_PkgFiles.*$|declare pkgdl_PkgFiles=$1|" "$0"
+			;;
+		"workdir")
+			shift	
+			[[ "${1,,}" = "default" ]] && sed -i 's|^declare pkgdl_WorkDir.*$|declare pkgdl_WorkDir="$pkgdl_MainDir"/work|' "$0" || sed -i "s|^declare pkgdl_WorkDir.*$|declare pkgdl_WorkDir=$1|" "$0"
 			;;
 	esac
 }
@@ -98,7 +115,7 @@ main() {
 	[[ -d "$pkgdl_PkgFiles" ]] || mkdir -p "$pkgdl_PkgFiles" || fatal "could not create PkgFiles directory"
 	[[ -d "$pkgdl_WorkDir" ]] || mkdir -p "$pkgdl_WorkDir" || fatal "could not creare WorkDir"
 	
-	case "$1" in
+	case "${1,,}" in
 		"get")
 			shift
 			getPkg "$@"
