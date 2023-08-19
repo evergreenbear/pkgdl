@@ -13,12 +13,7 @@ declare -r pkgdl_WorkDir="$pkgdl_MainDir"/work
 ## colors to differentiate output
 declare -r red='\033[0;31m'
 declare -r redbold='\033[01;31m'
-declare -r green='\033[0;32m'
 declare -r greenbold='\033[01;32m'
-declare -r blue='\033[0;34m'
-declare -r bluebold='\033[01;34m'
-declare -r magenta='\033[0;35m'
-declare -r magentabold='\033[01;35m'
 declare -r cyan='\033[0;36m'
 declare -r cyanbold='\033[01;36m'
 declare -r clearbold='\033[01m'
@@ -53,31 +48,24 @@ versionCheck() {
 
 # for errors
 fatal() {
-  printf "${redbold}Fatal error: ${red}%s\n ${clear}" "$*"
-  exit 1
+	printf "${redbold}Fatal error: ${red}%s\n ${clear}" "$*"
+	exit 1
 }
 
 getPkg() {
-	# make an associative array to match name of package with full path of Pkg file
-	for pkgFile in "$pkgdl_PkgFiles"/*; do
-		declare -A availablePkgs+=(["${pkgFile##*/}"]="$pkgFile")
-	done
-
-	# match given package to shortname, then find its long counterpart
-	# get it to break when it finds the package, and if it doesn't by the end THEN error
-	for shortPkg in "${!availablePkgs[@]}"; do
-		if [[ "$shortPkg" = "$1" ]]; then
-			printf "${clearbold}getting package ${cyanbold}$1...${clear}\n"
-			source ${availablePkgs[$1]}
-			printf "${greenbold}transaction completed successfully${clear}"
-			exit 0
-		else
-			false
-		fi
-	done
-	fatal "unknown package '$1'" #we only get this far if the loop does not break; the script terminates after successful package install
+	# source given pkgfile, if it exists
+	if [[ -f "$pkgdl_PkgFiles/$1" ]]; then
+		printf "${clearbold}getting package ${cyanbold}$1...${clear}\n"
+		source "$pkgdl_PkgFiles/$1"
+		printf "${greenbold}transaction completed successfully${clear}"
+		exit 0
+	else
+		# die if it doesn't
+		fatal "unknown package '$1'" 
+	fi
 }
 
+# generate & modify template
 template() {
 	cp -v "$pkgdl_MainDir"/template_pkgfile "$pkgdl_PkgFiles"/"$1"
 	sed -i "s/template/${1}/g" "$_"
