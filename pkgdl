@@ -1,0 +1,133 @@
+#!/bin/bash
+
+##
+## pkgdl: automate installing pre-compiled binaries for packages not provided by OpenMandriva mirrors
+##
+
+## TODO: add Tailscale   [ https://pkgs.tailscale.com/stable/tailscale_latest_amd64.tgz ]
+
+### CONFIG OPTIONS; these can be changed with `pkgdl config`
+declare -r pkgdl_MainDir="$HOME"/bin/pkgdl.d
+declare -r pkgdl_PkgFiles="$pkgdl_MainDir"/pkgs
+declare -r pkgdl_WorkDir="$pkgdl_MainDir"/work
+### ### ### ###
+
+## colors to differentiate output
+declare -r red='\033[0;31m'
+declare -r redbold='\033[01;31m'
+declare -r green='\033[0;32m'
+declare -r greenbold='\033[01;32m'
+declare -r blue='\033[0;34m'
+declare -r bluebold='\033[01;34m'
+declare -r magenta='\033[0;35m'
+declare -r magentabold='\033[01;35m'
+declare -r cyan='\033[0;36m'
+declare -r cyanbold='\033[01;36m'
+declare -r clearbold='\033[01m'
+declare -r clear='\033[0m'
+
+usage() {
+	printf "$(
+	cat <<- EOF
+	
+	${clearbold}pkgdl${clear}   version 0.1
+	package manager-ish thing for packages your distro doesn't provide, or that you want specific patches for, etc.
+
+	${clearbold}options
+	${cyanbold}get${clear}      : install/update your package
+	pkgdl get foo
+	pkgdl get foo latest [checks for updates]
+
+	${cyanbold}config${clear}   : modify certain options for pkgdl
+	pkgdl config MainDir $HOME/scripts/pkgdl.d
+	
+	${cyanbold}template${clear} : generate a template pkg file
+	pkgdl template bar
+	\n
+	EOF
+	)"
+}
+
+# compare current to newest version of package (called from respective pkg file)
+versionCheck() {
+	printf '%s\n%s\n' "$2" "$1" | sort --check=quiet --version-sort
+}
+
+# for errors
+fatal() {
+  printf "${redbold}Fatal error: ${red}%s\n ${clear}" "$*"
+  exit 1
+}
+
+getPkg() {
+	# make an associative array to match name of package with full path of Pkg file
+	for pkgFile in "$pkgdl_PkgFiles"/*; do
+		declare -A availablePkgs+=(["${pkgFile##*/}"]="$pkgFile")
+	done
+
+	# match given package to shortname, then find its long counterpart
+	# get it to break when it finds the package, and if it doesn't by the end THEN error
+	for shortPkg in "${!availablePkgs[@]}"; do
+		if [[ "$shortPkg" = "$1" ]]; then
+			printf "${clearbold}getting package ${cyanbold}$1...${clear}\n"
+			source ${availablePkgs[$1]}
+			printf "${greenbold}transaction completed successfully${clear}"
+			exit 0
+		else
+			false
+		fi
+	done
+	fatal "unknown package '$1'" #we only get this far if the loop does not break; the script terminates after successful package install
+}
+
+template() {
+	cp -v "$pkgdl_MainDir"/template_pkgfile "$pkgdl_PkgFiles"/"$1"
+	sed -i "s/template/${1}/g" "$_"
+}
+
+config() {
+	case "$1" in
+		"help"|"")
+			printf "$(
+			cat <<- EOF
+			${clearbold}pkgdl config
+			
+			${clearbold}options:${clear}
+			${cyanbold}MainDir${clear}  : change main directory of pkgdl       (default $HOME/bin/pkgdl.d)
+			${cyanbold}PkgFiles${clear} : change directory for package scripts (default [MainDir]/pkgs)
+			${cyanbold}WorkDir${clear}  : change package work directory        (default [MainDir]/work)
+			EOF
+			)"
+			;;
+		"MainDir")
+			shift
+			sed -i "s|^declare -r pkgdl_MainDir.*$|declare -r pkgdl_MainDir=$1|" "$0"
+			;;
+	esac
+}
+
+main() {
+	case "$1" in
+		"get")
+			shift
+			getPkg "$@"
+			;;
+		"config")
+			shift
+			config "$@"
+			;;
+		"template")
+			shift
+			template "$@"
+			;;
+		"help"|"")
+			usage
+			;;
+		*)
+			echo "unknown option '$1'"
+			usage
+			;;
+	esac
+}
+
+main "$@"
