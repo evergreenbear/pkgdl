@@ -106,9 +106,9 @@ config() {
 
 main() {
 	# ensure a sane environment
-	[[ ! -d "$pkgdl_MainDir" ]] && mkdir -p "$pkgdl_MainDir"
-	[[ ! -d "$pkgdl_PkgFiles" ]] && mkdir -p "$pkgdl_PkgFiles"
-	[[ ! -d "$pkgdl_WorkDir" ]] && mkdir -p "$pkgdl_WorkDir"
+	[[ -d "$pkgdl_MainDir" ]] || mkdir -p "$pkgdl_MainDir" || fatal "could not create MainDir"
+	[[ -d "$pkgdl_PkgFiles" ]] || mkdir -p "$pkgdl_PkgFiles" || fatal "could not create PkgFiles directory"
+	[[ -d "$pkgdl_WorkDir" ]] || mkdir -p "$pkgdl_WorkDir" || fatal "could not creare WorkDir"
 	
 	case "$1" in
 		"get")
