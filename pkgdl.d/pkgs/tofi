@@ -1,0 +1,43 @@
+#!/bin/bash
+
+pkgName=${BASH_SOURCE##*/}  #get package name from file name
+pkgDescription="Tiny dynamic menu for Wayland "
+
+# separate packages w/ spaces
+# can be left blank
+dependsLocal="" 	#pkgdl packages
+dependsSystem="freetype-devel cairo-devel pango-devel wayland-devel lib64xkbcommon-devel harfbuzz meson scdoc wayland-protocols-devel git"
+systemPkg="dnf install -y"
+
+# tofi itself provides no command for version information;
+# circumvent this by using local & latest git commit hash
+currentVersion="$pkgdl_EtcDir/$pkgName.commit"
+latestVersion="$(wget -qO- http://api.github.com/repos/philj56/tofi/commits/master | sed -n '2p' | cut -d \" -f4)"
+
+# logging is done automatically by pkgdl, as is entering/removing work directory :)
+build() {
+	git clone https://github.com/philj56/tofi.git && cd tofi
+	meson build
+	sudo ninja -C build install
+	git rev-parse HEAD > "$currentVersion"
+}
+
+
+##
+##  below should not need to be changed, make sure you know what you're doing !
+##
+update() {
+	[[ ! -f "$currentVersion" ]] && touch "$currentVersion"
+	if [[ "$(cat $currentVersion)" == "$latestVersion" ]]; then upToDate=1; else [[ "$checkUpdateOnly" = "yes" ]] && notify-send "pkgdl" "update available for: $pkgName"; fi
+	return 0
+}
+main() {
+	case "${1,,}" in
+		*"layabout"*) true ;;
+		*"check"*) update ;;
+		*"build"*) build ;;
+		*) update && if [[ ! "$upToDate" -eq 1 ]]; then build; fi ;;
+	esac
+}
+set -e
+main "$@"
