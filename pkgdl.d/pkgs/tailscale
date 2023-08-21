@@ -1,7 +1,7 @@
 #!/bin/bash
 
 pkgName=${BASH_SOURCE##*/} 
-pkgDescription="tailscale pkgfile"
+pkgDescription="The easiest, most secure way to use WireGuard and 2FA"
 
 dependsLocal=""
 dependsSystem=""
