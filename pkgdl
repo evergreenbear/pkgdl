@@ -8,7 +8,11 @@
 declare pkgdl_MainDir="$HOME"/bin/pkgdl.d
 declare pkgdl_PkgFiles="$pkgdl_MainDir"/pkgs
 declare pkgdl_WorkDir="$pkgdl_MainDir"/work
+declare pkgdl_EtcDir="$pkgdl_MainDir"/etc
 ### ### ### ###
+
+# exit on error
+set -e
 
 ## colors to differentiate output
 declare -r red='\033[0;31m'
@@ -16,6 +20,8 @@ declare -r redbold='\033[01;31m'
 declare -r greenbold='\033[01;32m'
 declare -r cyan='\033[0;36m'
 declare -r cyanbold='\033[01;36m'
+declare -r magenta='\033[0;35m'
+declare -r magentabold='\033[01;35m'
 declare -r clearbold='\033[01m'
 declare -r clear='\033[0m'
 
@@ -23,7 +29,7 @@ usage() {
 	printf "$(
 	cat <<- EOF
 	
-	${clearbold}pkgdl${clear}   version 0.1
+	${clearbold}pkgdl${clear}   version 0.2
 	package manager-ish thing for packages your distro doesn't provide, or that you want specific patches for, etc.
 
 	${clearbold}options
@@ -48,30 +54,70 @@ versionCheck() {
 
 # for errors
 fatal() {
-	printf "${redbold}Fatal error: ${red}%s\n ${clear}" "$*"
+	printf "${redbold}error: ${red}%s\n ${clear}" "$*"
 	exit 1
 }
 
 getPkg() {
-	# source given pkgfile, if it exists
-	if [[ -f "$pkgdl_PkgFiles/$1" ]]; then
-		printf "${clearbold}getting package ${cyanbold}$1...${clear}\n"
-		source "$pkgdl_PkgFiles/$1"
-		printf "${greenbold}transaction completed successfully${clear}\n"
-		exit 0
-	else
-		# die if it doesn't
-		fatal "unknown package '$1'" 
-	fi
+	# call itself for dependency resolution
+	for pkgfile in "${pkgQueue[@]}"; do
+		[[ ! "${2,,}" == "dependency" ]] && printf "${clearbold}beginning transaction for ${cyanbold}$pkgfile${clear}\n"
+		source "$pkgdl_PkgFiles"/"$pkgfile" check
+		[[ "$upToDate" -eq 1 ]] && printf "${clearbold}package${clear}${cyanbold} $pkgfile${clear} ${clearbold}is ${cyanbold}up-to-date${clear}${clearbold}, skipping...${clear}\n" && break
+
+		declare -A depTypeMap=( [system]=$dependsSystem [local]=$dependsLocal )
+		for depType in ${!depTypeMap[@]}; do
+    		depMap=${depTypeMap[$depType]}
+			if [[ ! -z $depMap ]]; then
+    			printf "${clearbold}getting $depType dependencies: ${magentabold}$depMap${clear}\n"
+    			case $depType in
+      				local ) "${BASH_SOURCE[0]}" g $depMap dependency;;
+      				system ) sudo $systemPkg $dependsSystem ;;
+    			esac
+			fi
+		done
+		# now source the Pkgfile for real
+		printf "${clearbold}getting ${cyanbold}$pkgfile${clear}...\n"
+		mkdir -p "$pkgdl_WorkDir/$pkgfile" && cd "$pkgdl_WorkDir/$pkgfile"
+		if source "$pkgdl_PkgFiles"/"$pkgfile" build; then
+			printf "${clearbold}transaction completed ${greenbold}successfully${clear}\n"
+		else
+			fatal "could not build $pkgfile"
+		fi
+		rm -rf "$pkgdl_WorkDir/$pkgfile"
+	done
+}
+
+infoPkg() {
+	# get package info quietly, then print it nice and neatly
+	for pkgfile in "${pkgQueue[@]}"; do
+		source "$pkgdl_PkgFiles"/"$pkgfile" layabout
+		[[ -f "$currentVersion" ]] && declare currentVersion="$(cat $currentVersion)"
+		[[ -z "$dependsLocal" ]] && declare dependsLocal="none"
+		[[ -z "$dependsSystem" ]] && declare dependsSystem="none"
+		printf "$(
+		cat <<- EOF
+		${clearbold}$pkgName
+		${cyanbold}latest version   : ${clear}$latestVersion
+		${cyanbold}local version    : ${clear}$currentVersion
+		${cyanbold}description      : ${clear}$pkgDescription
+		${cyanbold}depends (pkgdl)  : ${clear}$dependsLocal
+		${cyanbold}depends (system) : ${clear}$dependsSystem
+		EOF
+		)\n"
+	done
 }
 
 # generate & modify template
 template() {
+	[[ "$#" -eq 0 ]] && fatal "must provide a name for your Pkgfile"
+
 	if [[ -f "$pkgdl_PkgFiles"/"$1" ]]; then
 		fatal "pkgfile $1 exists, not overwriting"
 	else
 		cp -v "$pkgdl_MainDir"/template_pkgfile "$pkgdl_PkgFiles"/"$1"
-		sed -i "s/template/${1}/g" "$_"
+		sed -i "s/template/${1}/g" "$pkgdl_PkgFiles"/"$1"
+		chmod +x "$pkgdl_PkgFiles/$1"
 	fi
 }
 
@@ -93,18 +139,19 @@ config() {
 			EOF
 			)"
 			;;
+		## TODO: make below not an abomination
 		"maindir")
 			shift
 			# take advantage of how sed with single-quotes does not expand variables and double-quotes will
-			[[ "${1,,}" = "default" ]] && sed -i 's|^declare pkgdl_MainDir.*$|declare pkgdl_MainDir="$HOME"/bin/pkgdl.d|' "$0" || sed -i "s|^declare pkgdl_MainDir.*$|declare pkgdl_MainDir=$1|" "$0"
+			[[ "${1,,}" = "default" ]] && sed -i 's|^declare pkgdl_MainDir.*$|declare pkgdl_MainDir="$HOME"/bin/pkgdl.d|' "${BASH_SOURCE[0]}" || sed -i "s|^declare pkgdl_MainDir.*$|declare pkgdl_MainDir=$1|" "${BASH_SOURCE[0]}"
 			;;
 		"pkgfiles"|"pkgdir")
 			shift
-			[[ "${1,,}" = "default" ]] && sed -i 's|^declare pkgdl_PkgFiles.*$|declare pkgdl_PkgFiles="$pkgdl_MainDir"/pkgs|' "$0" || sed -i "s|^declare pkgdl_PkgFiles.*$|declare kgdl_PkgFiles=$1|" "$0" || sed -i "s|^declare pkgdl_PkgFiles.*$|declare pkgdl_PkgFiles=$1|" "$0"
+			[[ "${1,,}" = "default" ]] && sed -i 's|^declare pkgdl_PkgFiles.*$|declare pkgdl_PkgFiles="$pkgdl_MainDir"/pkgs|' "${BASH_SOURCE[0]}" || sed -i "s|^declare pkgdl_PkgFiles.*$|declare kgdl_PkgFiles=$1|" "${BASH_SOURCE[0]}" || sed -i "s|^declare pkgdl_PkgFiles.*$|declare pkgdl_PkgFiles=$1|" "${BASH_SOURCE[0]}"
 			;;
 		"workdir")
 			shift	
-			[[ "${1,,}" = "default" ]] && sed -i 's|^declare pkgdl_WorkDir.*$|declare pkgdl_WorkDir="$pkgdl_MainDir"/work|' "$0" || sed -i "s|^declare pkgdl_WorkDir.*$|declare pkgdl_WorkDir=$1|" "$0"
+			[[ "${1,,}" = "default" ]] && sed -i 's|^declare pkgdl_WorkDir.*$|declare pkgdl_WorkDir="$pkgdl_MainDir"/work|' "${BASH_SOURCE[0]}" || sed -i "s|^declare pkgdl_WorkDir.*$|declare pkgdl_WorkDir=$1|" "${BASH_SOURCE[0]}"
 			;;
 	esac
 }
@@ -114,25 +161,37 @@ main() {
 	[[ -d "$pkgdl_MainDir" ]] || mkdir -p "$pkgdl_MainDir" || fatal "could not create MainDir"
 	[[ -d "$pkgdl_PkgFiles" ]] || mkdir -p "$pkgdl_PkgFiles" || fatal "could not create PkgFiles directory"
 	[[ -d "$pkgdl_WorkDir" ]] || mkdir -p "$pkgdl_WorkDir" || fatal "could not creare WorkDir"
-	
+	[[ -d "$pkgdl_EtcDir" ]] || mkdir -p "$pkgdl_EtcDir" || fatal "could not create EtcDir"
+
+	declare -a pkgQueue=()
+	for arg in "${@,,}"; do
+		if [[ -f "$pkgdl_PkgFiles/$arg" ]]; then 
+			pkgQueue+=("$arg") #&& echo "added to pkgQueue"
+		fi
+	done
+
 	case "${1,,}" in
-		"get")
+		"get"|"g"|"in"|"install")
 			shift
 			getPkg "$@"
 			;;
-		"config")
+		"info"|"s"|"se"|"search")
+			shift
+			infoPkg "$@"
+			;;
+		"config"|"c")
 			shift
 			config "$@"
 			;;
-		"template")
+		"template"|"t")
 			shift
 			template "$@"
 			;;
-		"help"|"")
+		"help"|"-h"|"--help"|"")
 			usage
 			;;
 		*)
-			echo "unknown option '$1'"
+			printf "${redbold}unknown option ${red}'%s'${clear}\n" "$arg"
 			usage
 			;;
 	esac
