@@ -1,64 +1,39 @@
 #!/bin/bash
 
-##
-## pkgs/hyprland: pkgdl file for hyprland
-##
+pkgName=${BASH_SOURCE##*/}  #get package name from file name
+pkgDescription="highly customizable dynamic tiling Wayland compositor that doesn't sacrifice on its looks"
 
-# fail on error
-set -e
-
-# modify version variables to apply for your package, must be only the version e.g. 3.2.1
-declare -r hyprland_CurrentVersion="$(hyprctl version | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
-declare -r hyprland_LatestVersion="$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/hyprwm/Hyprland/releases/latest | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
-declare -r pkgName=${BASH_SOURCE##*/}
+dependsLocal=""
+dependsSystem="lib64EGL1 lib64wayland-cursor0 lib64xkbcommon0 lib64input10 lib64OpenGL0 lib64GLESv2_2 lib64vulkan1 lib64seat1 lib64display-info lib64liftoff0 lib64xcb-util-renderutil0 lib64xcb-xinput0 lib64xcb-composite0 lib64xcb-ewmh2 lib64xcb-icccm4 lib64xcb-res0 lib64xcb-util-errors0 binutils"
+systemPkg="dnf install -y"
+currentVersion="$(hyprctl version | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
+latestVersion="$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/hyprwm/Hyprland/releases/latest | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
 
 
-needsUpdate() {
-	# compare local pkg version to latest
-	# this shouldn't need to be changed
-	
-	if versionCheck "$hyprland_CurrentVersion" "$hyprland_LatestVersion"; then
-		echo "$pkgName is up to date"
-		exit 0
-	else
-		# only notify if we're not upgrading, otherwise upgrade
-		[[ "$checkUpdateOnly" = "yes" ]] && notify-send "pkgdl" "update available for: $pkgName" || get
-		return 0
-	fi
+build() {
+		curl -fLO https://github.com/hyprwm/Hyprland/releases/download/v"$latestVersion"/v"$latestVersion".tar.gz
+		tar xf "v$latestVersion".tar.gz && rm "v$latestVersion".tar.gz
+		cd hyprland
+
+		sudo cp -v libwlroots.so.12032 /usr/lib64/ 
+		sudo cp -v {hyprctl,Hyprland} /usr/bin/
 }
 
-get() {
-	# enter work directory
-	mkdir -p "$pkgdl_WorkDirectory"/"$pkgName" && cd "$_"
 
-	# pull newest version
-	curl -fLO https://github.com/hyprwm/Hyprland/releases/download/v"$hyprland_LatestVersion"/v"$hyprland_LatestVersion".tar.gz
-	tar xf "v$hyprland_LatestVersion".tar.gz && rm "$_"
-	cd hyprland
-
-	# copy binaries and voila; hyprland is upgraded
-	sudo cp -v libwlroots.so.12032 /usr/lib64  #OpenMandriva, openSUSE, & prob others, /usr/lib isn't the right place
-	sudo cp -v {hyprctl,Hyprland} /usr/bin
-
-	# things are done, remove our work directory
-	rm -rf "$pkgdl_WorkDirectory"/"$pkgName"
+##
+##  below should not need to be changed, make sure you know what you're doing !
+##
+update() {
+	if versionCheck "$currentVersion" "$latestVersion"; then upToDate=1; else [[ "$checkUpdateOnly" = "yes" ]] && notify-send "pkgdl" "update available for: $pkgName"; fi
+	return 0
 }
-
 main() {
-	shift
-	case "$1" in
-		"get"|"")
-			needsUpdate
-			get
-			;;
-		"latest")
-			declare checkUpdateOnly="yes"
-			needsUpdate
-			;;
-		*)
-			fatal "unknown option $1"
+	case "${1,,}" in
+		*"layabout"*) true ;;
+		*"check"*) update ;;
+		*"build"*) build ;;
+		*) update && if [[ ! "$upToDate" -eq 1 ]]; then build; fi ;;
 	esac
 }
-
-
+set -e
 main "$@"
