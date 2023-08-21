@@ -1,65 +1,39 @@
 #!/bin/bash
 
-##
-## pkgs/tailscale: pkgdl file for tailscale
-##
+pkgName=${BASH_SOURCE##*/} 
+pkgDescription="tailscale pkgfile"
 
-# fail on error
-set -e
+dependsLocal=""
+dependsSystem=""
+systemPkg="dnf install -y"
+currentVersion="$(tailscale version | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
+latestVersion="$(curl -Ls -o /dev/null -w %{url_effective} https://pkgs.tailscale.com/stable/tailscale_latest_amd64.tgz | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
 
-# modify version variables to apply for your package, must be only the version e.g. 3.2.1
-declare -r tailscale_CurrentVersion="$(tailscale version | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
-declare -r tailscale_LatestVersion="$(curl -Ls -o /dev/null -w %{url_effective} https://pkgs.tailscale.com/stable/tailscale_latest_amd64.tgz | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
-declare -r pkgName=${BASH_SOURCE##*/}
-
-needsUpdate() {
-	# compare local pkg version to latest
-	# this shouldn't need to be changed
-	
-	if versionCheck "$tailscale_CurrentVersion" "$tailscale_LatestVersion"; then
-		echo "$pkgName is up to date"
-		exit 0
-	else
-		# only notify if we're not upgrading, otherwise upgrade
-		[[ "$checkUpdateOnly" = "yes" ]] && notify-send "pkgdl" "update available for: $pkgName"
-		return 0
-	fi
-}
-
-get() {
-	# enter work directory
-	mkdir -p "$pkgdl_WorkDir"/"$pkgName" && cd "$_"
-
-
-	curl -fLO https://pkgs.tailscale.com/stable/tailscale_"$tailscale_LatestVersion"_amd64.tgz
-	tar xf tailscale_"$tailscale_LatestVersion"_amd64.tgz && rm "$_"
-	cd tailscale_"$tailscale_LatestVersion"_amd64
-	sudo cp -v tailscaled /usr/sbin
-	sudo cp -v tailscale /usr/bin
-	sudo cp -v systemd/tailscaled.service /etc/systemd/system
+build() {
+	curl -fLO https://pkgs.tailscale.com/stable/tailscale_"$latestVersion"_amd64.tgz
+	tar xf tailscale_"$latestVersion"_amd64.tgz && rm tailscale_"$latestVersion"_amd64.tgz
+	cd tailscale_"$latestVersion"_amd64
+	sudo cp -v tailscaled /usr/sbin/
+	sudo cp -v tailscale /usr/bin/
+	sudo cp -v systemd/tailscaled.service /etc/systemd/system/
 	sudo cp -v systemd/tailscaled.defaults /etc/default/tailscaled
-
-	# things are done, remove our work directory
-	rm -rf "$pkgdl_WorkDir"/"$pkgName"
 }
 
-main() {
-	# this shouldn't need to be changed either
 
-	shift
-	case "$1" in
-		"get"|"")
-			needsUpdate
-			get
-			;;
-		"latest")
-			declare checkUpdateOnly="yes"
-			needsUpdate
-			;;
-		*)
-			fatal "unknown option $1"
+##
+##  below should not need to be changed, make sure you know what you're doing !
+##
+update() {
+	if versionCheck "$currentVersion" "$latestVersion"; then upToDate=1; else [[ "$checkUpdateOnly" = "yes" ]] && notify-send "pkgdl" "update available for: $pkgName"; fi
+	return 0
+}
+main() {
+	case "${1,,}" in
+		*"layabout"*) true ;;
+		*"check"*) update ;;
+		*"build"*) build ;;
+		*) update && if [[ ! "$upToDate" -eq 1 ]]; then build; fi ;;
 	esac
 }
-
-
+set -e
 main "$@"
