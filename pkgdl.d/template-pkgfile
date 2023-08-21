@@ -1,60 +1,42 @@
 #!/bin/bash
 
-##
-## pkgs/template: pkgdl file for template
-##
+pkgName=${BASH_SOURCE##*/}  #get package name from file name
+pkgDescription="template pkgfile"
 
-# fail on error
-set -e
+# separate packages w/ spaces
+# can be left blank
+dependsLocal="" 	#pkgdl packages
+dependsSystem=""	#pkgs from your system package manager
+systemPkg=""		#e.g. 'dnf install -y', 'pacman -S', etc
 
-# modify version variables to apply for your package, must be only the version e.g. 3.2.1
-declare -r template_CurrentVersion="$(hyprctl version | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
-declare -r template_LatestVersion="$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/hyprwm/Hyprland/releases/latest | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
-declare -r pkgName=${BASH_SOURCE##*/}
+# commands to check current and latest version of pkg, as this example
+# must be _only_ the version, e.g. 18.0.4
+currentVersion="$(hyprctl version | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
+latestVersion="$(curl -Ls -o /dev/null -w %{url_effective} https://github.com/hyprwm/Hyprland/releases/latest | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+')"
 
-needsUpdate() {
-	# compare local pkg version to latest
-	# this shouldn't need to be changed
-	
-	if versionCheck "$template_CurrentVersion" "$template_LatestVersion"; then
-		echo "$pkgName is up to date"
-		exit 0
-	else
-		# only notify if we're not upgrading, otherwise upgrade
-		[[ "$checkUpdateOnly" = "yes" ]] && notify-send "pkgdl" "update available for: $pkgName"
-		return 0
-	fi
+
+# logging is done automatically by pkgdl, as is entering/removing work directory :)
+build() {
+
+	# everything needed to install the package goes here (pulling binary, copying files, or building source, etc.)	
+
 }
 
-get() {
-	# enter work directory
-	mkdir -p "$pkgdl_WorkDirectory"/"$pkgName" && cd "$_"
 
-
-	## ...  do everything needed to install the package here (pulling binary, copying files, etc.)  ... ##
-
-
-	# things are done, remove our work directory
-	rm -rf "$pkgdl_WorkDir"/"$pkgName"
+##
+##  below should not need to be changed, make sure you know what you're doing !
+##
+update() {
+	if versionCheck "$currentVersion" "$latestVersion"; then upToDate=1; else [[ "$checkUpdateOnly" = "yes" ]] && notify-send "pkgdl" "update available for: $pkgName"; fi
+	return 0
 }
-
 main() {
-	# this shouldn't need to be changed either
-
-	shift
-	case "$1" in
-		"get"|"")
-			needsUpdate
-			get
-			;;
-		"latest")
-			declare checkUpdateOnly="yes"
-			needsUpdate
-			;;
-		*)
-			fatal "unknown option $1"
+	case "${1,,}" in
+		*"layabout"*) true ;;
+		*"check"*) update ;;
+		*"build"*) build ;;
+		*) update && if [[ ! "$upToDate" -eq 1 ]]; then build; fi ;;
 	esac
 }
-
-
+set -e
 main "$@"
